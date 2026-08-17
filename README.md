@@ -1,6 +1,6 @@
 # GBG Tool for Migration
 
-`Migrate-ConditionalAccessPolicies.ps1` starts a GBG-branded local browser webpage for selected Microsoft Entra and Intune Security Policy Migration using interactive Microsoft Graph sign-in. No app registration, client ID, client secret, certificate, or credentials file is used.
+`Migrate-script.ps1` starts a GBG-branded local browser webpage for selected Microsoft Entra and Intune Security Policy Migration using interactive Microsoft Graph sign-in. No app registration, client ID, client secret, certificate, or credentials file is used.
 
 The tool provides four workload choices:
 
@@ -29,7 +29,7 @@ You must sign in interactively as an administrator in each tenant. Consent is re
 ## Run the Browser App
 
 ```powershell
-.\Migrate-ConditionalAccessPolicies.ps1
+.\Migrate-script.ps1
 ```
 
 The script opens a local `127.0.0.1` webpage in the default browser. Select **Sign In to Source** and **Sign In to Destination** separately, choosing the correct tenant account in each Microsoft browser prompt. The tool automatically captures each signed-in tenant ID and default verified domain. The migration button remains unavailable until both sign-ins succeed.
@@ -41,7 +41,7 @@ After the source sign-in completes, use the workload's **Policies to Migrate** t
 Use `-NoGui` only when a GUI is not suitable:
 
 ```powershell
-.\Migrate-ConditionalAccessPolicies.ps1 `
+.\Migrate-script.ps1 `
   -NoGui `
   -SourceTenantId '<source-tenant-guid>' `
   -TargetTenantId '<destination-tenant-guid>' `
