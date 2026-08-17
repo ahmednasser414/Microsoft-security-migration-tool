@@ -64,12 +64,16 @@ function Copy-GraphObject {
 }
 
 function New-ObjectIndex {
-    param([object[]] $Items, [string] $Property, [string] $Description)
+    param([object[]] $Items, [string] $Property, [string] $Description, [switch] $AllowDuplicateKeys)
     $index = @{}
     foreach ($item in $Items) {
         $key = [string] (Get-ObjectProperty -Object $item -Name $Property)
         if ([string]::IsNullOrWhiteSpace($key)) { continue }
-        if ($index.ContainsKey($key)) { throw "More than one $Description has the value '$key'." }
+        if ($index.ContainsKey($key)) {
+            if (-not $AllowDuplicateKeys) { throw "More than one $Description has the value '$key'." }
+            $index[$key] = @($index[$key]) + $item
+            continue
+        }
         $index[$key] = $item
     }
     $index
@@ -261,8 +265,10 @@ function Resolve-ConditionalAccessAssignments {
         foreach ($value in $values) {
             if (-not $SourceData.GroupsById.ContainsKey($value)) { throw "Source group '$value' was not found." }
             $name = $SourceData.GroupsById[$value].displayName
-            if (-not $TargetGroupsByName.ContainsKey($name)) { throw "Destination group '$name' was not found or is not unique." }
-            $resolved += $TargetGroupsByName[$name].id
+            $matches = if ($TargetGroupsByName.ContainsKey($name)) { @($TargetGroupsByName[$name]) } else { @() }
+            if ($matches.Count -eq 0) { throw "Destination group '$name' was not found." }
+            if ($matches.Count -gt 1) { throw "More than one destination group is named '$name'. Rename the duplicates or use a unique group name." }
+            $resolved += $matches[0].id
         }
         $assignment.Value = @($resolved)
     }
@@ -287,7 +293,7 @@ function Resolve-ConditionalAccessAssignments {
 function Invoke-ConditionalAccessMigration {
     param($SourceData, [string[]] $Ids, [ValidateSet('ReportOnly', 'Enabled', 'Disabled')] [string] $State, [switch] $IncludeDisabled)
     $targetUsers = New-ObjectIndex -Items @(Get-GraphCollection -Path '/users?%24select=id,userPrincipalName') -Property 'userPrincipalName' -Description 'destination user'
-    $targetGroups = New-ObjectIndex -Items @(Get-GraphCollection -Path '/groups?%24select=id,displayName') -Property 'displayName' -Description 'destination group'
+    $targetGroups = New-ObjectIndex -Items @(Get-GraphCollection -Path '/groups?%24select=id,displayName') -Property 'displayName' -Description 'destination group' -AllowDuplicateKeys
     $targetLocations = New-ObjectIndex -Items @(Get-GraphCollection -Path '/identity/conditionalAccess/namedLocations') -Property 'displayName' -Description 'destination named location'
     $existingNames = @(Get-GraphCollection -Path '/identity/conditionalAccess/policies?%24select=displayName' | ForEach-Object { $_.displayName })
     $results = @(); $newState = @{ ReportOnly = 'enabledForReportingButNotEnforced'; Enabled = 'enabled'; Disabled = 'disabled' }[$State]
@@ -419,7 +425,7 @@ function Get-IntuneData {
 
 function Invoke-IntuneMigration {
     param($SourceData, [string[]] $Ids)
-    $targetGroups = New-ObjectIndex -Items @(Get-GraphCollection -Path '/groups?%24select=id,displayName' -Beta) -Property 'displayName' -Description 'destination group'
+    $targetGroups = New-ObjectIndex -Items @(Get-GraphCollection -Path '/groups?%24select=id,displayName' -Beta) -Property 'displayName' -Description 'destination group' -AllowDuplicateKeys
     $existingNames = @(Get-GraphCollection -Path '/deviceManagement/configurationPolicies?%24select=name' -Beta | ForEach-Object { $_.name })
     $results = @()
     foreach ($source in @($SourceData.Policies | Where-Object { $_.id -in $Ids })) {
@@ -452,8 +458,10 @@ function Invoke-IntuneMigration {
                     if (-not [string]::IsNullOrWhiteSpace($sourceGroupId)) {
                         if (-not $SourceData.GroupsById.ContainsKey($sourceGroupId)) { throw "Source assignment group '$sourceGroupId' was not found." }
                         $name = $SourceData.GroupsById[$sourceGroupId].displayName
-                        if (-not $targetGroups.ContainsKey($name)) { throw "Destination assignment group '$name' was not found or is not unique." }
-                        $target.groupId = $targetGroups[$name].id
+                        $matches = if ($targetGroups.ContainsKey($name)) { @($targetGroups[$name]) } else { @() }
+                        if ($matches.Count -eq 0) { throw "Destination assignment group '$name' was not found." }
+                        if ($matches.Count -gt 1) { throw "More than one destination assignment group is named '$name'. Rename the duplicates or use a unique group name." }
+                        $target.groupId = $matches[0].id
                     }
                     $mapped += @{ target = $target }
                 }
